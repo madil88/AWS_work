@@ -1,0 +1,50 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Description" : "Some stack that does some thing.",
+
+  "Parameters" : {
+    "StackType" : {
+      "Description": "Allowed values are 'dev', 'qa' or 'prd'. You must specify the stack type.",
+      "Type": "String",
+      "AllowedValues" : ["dev", "qa", "prd"]
+    }
+  },
+
+  "Conditions" : {
+
+    "BuildDev" : {
+      "Fn::Equals" : [ { "Ref" : "StackType"}, "dev"]
+    },
+
+    "BuildQa" : {
+      "Fn::Equals" : [ { "Ref" : "StackType"}, "qa"]
+    },
+
+    "BuildPrd" : {
+       "Fn::Equals" : [ { "Ref" : "StackType"}, "prd" ]
+    }
+
+  },
+
+  "Resources": {
+
+    "BastionInstance" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "InstanceType" : 
+          { "Fn::If" : [ "BuildPrd", "m3.large",
+           { "Fn::If" : [ "BuildQa","m1.small", 
+             "t1.micro" 
+           ]}
+        ]},
+        "ImageId" : { "Fn::FindInMap" : [ "ImageMap", { "Ref" : "AWS::Region" }, "BastionAMI" ]},
+        "SecurityGroups" : [{ "Ref" : "BastionSecurityGroup" } ],
+        "SubnetId" : { "Ref" : "PubNet01" },
+        "AssociatePublicIpAddress" : "true",
+      }
+    }
+  }
+
+}
+

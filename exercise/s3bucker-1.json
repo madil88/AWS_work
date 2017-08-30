@@ -1,0 +1,8 @@
+{
+ "Resources": {
+   "S3bucker_firsttime": {
+       "Type": "AWS::S3::Bucket",
+       "Properties": {}
+                         }
+              }
+}
