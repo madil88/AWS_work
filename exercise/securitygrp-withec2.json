@@ -1,0 +1,21 @@
+{ "Resource": {
+   "Ec2Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+         "SecurityGroups": [ { "Ref": "newsecuritygroup"} ],
+         "KeyName": "mykey",
+         "ImageID": "ami-7a11e213"
+     }
+   },
+  "newsecuritygrgoup" : {
+      "Type": "AWS::EC2::SecurityGroups",
+      "Properties": {
+           "GroupDescription": "Enable SSH 22",
+           "SecurityGroupIngress": [ {
+                "IpProtocol": "tcp",
+                "FromPort" : "22",
+                "ToPort" : "22",
+                "CidrIP" : "0.0.0.0/0" } ]
+     }
+  } 
+} }
