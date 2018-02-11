@@ -1,0 +1,30 @@
+{
+  "Description": "Create an EC2 Instance with input of keypaid",
+  "Parameters": {
+    "KeyPair": {
+        "Description": "This is the keypair to access the EC2 Instance",
+        "Type": "String"
+    }
+  },
+  "Resources": {
+      "Ec2Instance": {
+         "Properties": {
+             "ImageID": "ami-9d23aeea",
+             "InstanceType": "t1.micro",
+             "KeyName": {
+                  "Ref": "KeyPair"
+                        }
+                        },
+              "Type": "AWS:EC2::Instance"
+                   }
+                   },
+  "Outputs": {
+       "InstanceID": {
+          "Description": "The instance id of newly created ec2 instance",
+          "Value"; {
+              "Ref": "Ec2Instance"
+                   }
+                }
+ },
+        "AWSTemplateFormatVersion": "2017-08-30"
+}

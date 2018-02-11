@@ -1,0 +1,6 @@
+#!/usr/local/bin/python
+
+import sys, json, yaml
+
+with open(sys.argv[1]) as f:
+print yaml.safe_dump(json.load(f), default_flow_style=False)

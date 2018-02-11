@@ -1,0 +1,1 @@
+pajv test --all-errors -s schema-1simeple.json -d person.json --valid
