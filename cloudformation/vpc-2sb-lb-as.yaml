@@ -1,0 +1,224 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Code of this temaplate is valided with Cloudformation designer'
+Resources:
+  VPCId:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      InstanceTenancy: default
+      CidrBlock: 172.31.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+  SubnetA:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPCId
+      AvailibilityZone: us-east1a
+      CidrBlock: 172.31.0.0/21
+      MapPublicIpOnLaunch: True
+
+
+  SubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPCId
+      AvailibilityZone: us-east1b
+      CidrBlock: 172.31.32.0/21
+      MapPublicIpOnLaunch: True
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      VpcId: !Ref VPCId
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPCId
+      InternetGatewayId: !Ref InternetGateway
+
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPCId
+
+  InternetRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      VpcId: !Ref VPCId
+      Destination: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTable
+
+
+
+  SubnetARouteTableAssociation:
+    Type:  'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetA
+
+  SubnetBRouteTableAssociation:
+    Type:  'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetB
+
+  WebServerGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      VPCZoneIdentifier:
+        - Ref: SubnetA
+        - Ref: SubnetB
+      LaunchConfigurationName: !Ref AutoScalingLaunchConfiguration
+      MinSize: '1'
+      MaxSize: '3'
+      TargetGroupARNs: !Ref ALBTargetGroup
+      NotificationConfiguration:
+        TopicARN: !Ref NotificationTopic
+        NotificationTypes:
+          - 'autoscaling:EC2_INSTANCE_LAUNCH'
+          - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+          - 'autoscaling:EC2_INSTANCE_TERMINATE'
+          - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      CreationPolicy:
+        ResourceSignal:
+          Timeout: PT15M
+          Count: '1'
+
+      UpdatePolicy:
+        AutoScalingRollingUpdate:
+          MinInstanceService: '1'
+          MaxBatchSize: '1'
+          Timeout: PT15M
+          WaitOnResourceSignals: 'true'
+
+
+
+  AutoScalingLaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      KeyName: 'tutorial'
+      ImageId: 'ami123lin'
+      InstanceType: 't2.micro'
+
+
+
+
+  AutoScalingUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjusmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerGroup
+      CoolDown: '60'
+      ScalingAdjusment: '1'
+
+
+  AutoScalingDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjusmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerGroup
+      CoolDown: '60'
+      ScalingAdjustment: '-1'
+
+
+  CpuAlarmHigh:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      MatricName: CPUAlarm
+      NameSpace: AWS/EC2
+      ComparisionOperator: GreaterThenThreshold
+      Statistics: Average
+      Period: '300'
+      EvaluationPeriod: '2'
+      Threshold: '80'
+      AlarmActions: !Ref AutoScalingUpPolicy
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerGroup
+
+
+
+
+  CpuAlarmLow:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      MatricName: CPUAlarm
+      NameSpace: AWS/EC2
+      ComparisionOperator: LessThenThreshold
+      Statistics: Average
+      Period: '300'
+      EvaluationPeriod: '2'
+      Thresold: '30'
+      AlarmActions: !Ref AutoScalingDownPolicy
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerGroup
+
+
+  NotificationTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      Subscription:
+        - EndPoint: test@test.com
+          Protocool: email
+
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Subnets:
+        - Ref: SubnetA
+        - Ref: SubnetB
+
+
+
+  ApplicationLoadBalancerListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupARN: !Ref ALBTargetGroup
+      LoadBalancerARN: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocool: http
+
+
+  ALBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervels: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresoldCounts: 30
+      Port: 80
+      Protocool: http
+      UnhealthyThresoldCount: 5
+      VpcId: !Ref VPCId
+
+
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable SSH access and HTTP from the load balancer only
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId: !Select
+            - 0
+            - !GetAtt
+              - ApplicationLoadBalancer
+              - SecurityGroups
+      VpcId: !Ref VPCId
+Outputs:
+  URL:
+    Description: The URL of the website
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt
+          - ApplicationLoadBalancer
+          - DNSName
+
