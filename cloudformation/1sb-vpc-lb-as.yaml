@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This temaplete contain a VPC with 1 public subnet. Autoscaling autoscale the instances from 1 to 3when the cpu alert indicates the high cpu usage after 80%.'
+Parameters:
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Description: 'VPC of /24 subnet which holds 256 ip addresses'
+    Properties:
+      InstanceTanency: Default
+      CidrBlock: '10.0.0.0/0'
+      EnableDnsSupport: true
+      EnableDnsHost: true
+
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      VpcId: !Ref VPC
+
+
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+
+  Subnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailibilityZone: 'us-east-1e'
+      CidrBlock: 10.0.1.0/27
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+
+
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+
+
+  InternetRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      Destination: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTable
+      VpcId: !Ref VPC
+
+
+
+  SubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref Subnet
+      RouteTableId: !Ref RouteTable
+
+
+  AutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      AvailibilityZone:
+        - Ref: Subnet
+      CoolDown: 60
+      DesiredCapacity: 1
+      MinSize: 1
+      MaxSize: 3
+      LaunchConfigurationName: !Ref AutoScalingLaunchConfiguration
+      TargetGroup: !Ref ApplicationLoadBalancerTargetGroup
+      NotificationConfigurations:
+        TopicARN: !Ref NotificationTopic
+        NotificationType:
+          - 'autoscaling:EC2_INSTANCE_LAUNCH'
+          - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+          - 'autoscaling:EC2_INSTANCE_TERMINATE'
+          - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      VPCZoneIdentifier:
+        - Ref: Subnet
+      CreationPolicy:
+        ResourceSignal:
+          Timeout: 'PT15M'
+          Count: '1'
+      UpdatePolicy:
+        MinInstanceInService: '1'
+        MaxBatchSize: '1'
+        Timeout: 'PT15M'
+        WaitOnResourceSignal: true
+
+
+
+  AutoScalingLaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      ImageId: ami-97785bed
+      InstanceType: t2.micro
+      KeyName: tutorial
+
+
+  AutoScalingUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      CoolDown: 60
+      ScalingAdjustment: '1'
+
+
+  AutoScalingDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      CoolDown: 60
+      ScalingAdjustment: '-1'
+
+
+  CpuAlarmhigh:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      MatrixName: CPUUtilization
+      NameSpace: AWS/EC2
+      Comparision: GreaterThenThreshold
+      Statistics: Average
+      Period: '300'
+      EvaluationPeriod: '2'
+      Threshold: '75'
+      AlarmActions: !Ref AutoScalingUpPolicy
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref AutoScalingGroup
+
+
+
+  CpuAlarmLow:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      MatrixName: CPUUtilization
+      NameSpace: AWS/EC2
+      Comparision: LessThenThreshold
+      Statistics: Average
+      Period: '300'
+      EvaluationPeriod: '2'
+      Threshold: '30'
+      AlarmActions: !Ref AutoScalingDownPolicy
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref AutoScalingGroup
+
+
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Subnets:
+        - Ref: Subnet
+
+
+  ApplicationLoadBalancerListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupARNs: !Ref ApplicationLoadBalancerTargetGroup
+      Port: 80
+      Protocool: http
+
+
+  ApplicationLoadBalancerTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervals: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckThresholdCounts: 30
+      Port: 80
+      Protocool: http
+      UnhealthThresholdCount: 3
+      VpcId: !Ref VPC
+
+  NotificationTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      Subscription:
+        - EndPoint: test@test.com
+          Protocool: email
+
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable SSH access and HTTP from the load balancer only
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId: !Select
+            - 0
+            - !GetAtt
+              - ApplicationLoadBalancer
+              - SecurityGroups
+      VpcId: !Ref VPC
+     
+Outputs:
+  URL:
+    Description: The URL of the website
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt
+          - ApplicationLoadBalancer
+          - DNSName
+     
