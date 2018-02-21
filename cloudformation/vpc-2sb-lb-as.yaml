@@ -124,7 +124,7 @@ Resources:
   CpuAlarmHigh:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      MatricName: CPUAlarm
+      MatricName: CPUUtilization
       NameSpace: AWS/EC2
       ComparisionOperator: GreaterThenThreshold
       Statistics: Average
@@ -142,7 +142,7 @@ Resources:
   CpuAlarmLow:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      MatricName: CPUAlarm
+      MatricName: CPUUtilization
       NameSpace: AWS/EC2
       ComparisionOperator: LessThenThreshold
       Statistics: Average
